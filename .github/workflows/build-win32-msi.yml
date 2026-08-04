@@ -18,9 +18,69 @@ on:
 permissions:
   contents: read
 
+env:
+  ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
+# A Windows MSI can only be produced on a Windows runner, so the pipeline is
+# split: the platform-neutral core compile (the slow part) runs once on
+# ubuntu-latest and is shared by both architectures, then each arch is packaged
+# and turned into an MSI on windows-2022.
+#
+# The mangler (build/lib/mangle) crashes on Void-added deps
+# (google-auth-library .d.ts, "Overlapping edit"), so the non-mangled compile
+# is used; the app is functionally identical, just not minified.
 jobs:
-  build:
+  compile:
+    name: Compile core (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        # --ignore-scripts: the native module binaries (.node) are not needed to
+        # compile; they are built for the Windows target in the package job.
+        # Avoids node-gyp builds for the Electron ABI on Linux.
+        run: npm ci --ignore-scripts
+        timeout-minutes: 60
+
+      - name: Compile core (TypeScript -> out-build)
+        run: npm run gulp compile-build-without-mangling
+        timeout-minutes: 120
+
+      - name: Compile built-in extensions
+        run: |
+          npm run gulp clean-extensions-build
+          npm run gulp compile-non-native-extensions-build
+          npm run gulp compile-extension-media-build
+        timeout-minutes: 60
+
+      - name: Bundle VS Code (out-build -> out-vscode)
+        run: npm run gulp bundle-vscode
+        timeout-minutes: 60
+
+      - name: Package compile artifacts
+        run: tar -czf compile-artifacts.tar.gz out-vscode .build/extensions out-build/date
+
+      - name: Upload compile artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: compile-artifacts
+          path: compile-artifacts.tar.gz
+          retention-days: 1
+
+  package:
     name: Void win32-${{ matrix.arch }} MSI
+    needs: compile
     strategy:
       fail-fast: false
       matrix:
@@ -31,11 +91,9 @@ jobs:
       npm_config_runtime: electron
       npm_config_target: 34.3.2
       npm_config_foreground_scripts: "true"
-      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
-      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - name: Configure pagefile (avoid OOM during mangled compile)
+      - name: Configure pagefile (avoid OOM during native module builds)
         uses: al-cheb/configure-pagefile-action@v1.5
         with:
           minimum-size: 16GB
@@ -56,15 +114,25 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install dependencies
+      - name: Download compile artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: compile-artifacts
+
+      - name: Extract compile artifacts
+        run: |
+          tar -xzf compile-artifacts.tar.gz
+          Remove-Item compile-artifacts.tar.gz
+
+      - name: Install dependencies (native modules for ${{ matrix.arch }})
         run: npm ci
         timeout-minutes: 120
 
-      - name: Build Void (${{ matrix.arch }})
-        # Non-min task: the mangler crashes on Void-added deps (google-auth-library .d.ts,
-        # "Overlapping edit"). App is functionally identical, just not minified.
-        run: npm run gulp "vscode-win32-${{ matrix.arch }}"
-        timeout-minutes: 180
+      - name: Package Void into ../VSCode-win32-${{ matrix.arch }}
+        # Package-only task (-ci): compiles native extensions and packages the
+        # app from the pre-compiled out-vscode artifact; no TypeScript recompile.
+        run: npm run gulp "vscode-win32-${{ matrix.arch }}-ci"
+        timeout-minutes: 90
 
       - name: Install Inno updater
         run: npm run gulp "vscode-win32-${{ matrix.arch }}-inno-updater"
