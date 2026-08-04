@@ -47,11 +47,13 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        # --ignore-scripts: the native module binaries (.node) are not needed to
-        # compile; they are built for the Windows target in the package job.
-        # Avoids node-gyp builds for the Electron ABI on Linux.
-        run: npm ci --ignore-scripts
-        timeout-minutes: 60
+        # Full npm ci (not --ignore-scripts): the root postinstall installs the
+        # build/ and extensions/ workspaces' deps (build/node_modules provides
+        # ternary-stream, @vscode/vsce, ...) which the compile tasks require.
+        # Native modules build for the Electron ABI on Linux here; the
+        # Windows-target binaries are built later on the package job.
+        run: npm ci
+        timeout-minutes: 120
 
       - name: Compile core (TypeScript -> out-build)
         run: npm run gulp compile-build-without-mangling
