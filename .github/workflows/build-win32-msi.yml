@@ -25,7 +25,7 @@ jobs:
       fail-fast: false
       matrix:
         arch: [x64, arm64]
-    runs-on: windows-latest
+    runs-on: windows-2022
     env:
       npm_config_arch: ${{ matrix.arch }}
       npm_config_runtime: electron
