@@ -3,8 +3,13 @@ name: Build Windows MSI Installers
 on:
   workflow_dispatch:
   push:
+    branches:
+      - '**'
     tags:
       - 'v*'
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.txt'
   pull_request:
     paths:
       - '.github/workflows/build-win32-msi.yml'
