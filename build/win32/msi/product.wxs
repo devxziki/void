@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="Void"
+    Manufacturer="Void"
+    Version="$(var.VoidVersion)"
+    UpgradeCode="$(var.UpgradeCode)"
+    Scope="perMachine"
+    InstallerVersion="500"
+    Language="1033"
+    Compressed="yes">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Void is already installed. Setup will now exit." />
+
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="INSTALLFOLDER" Name="Void" />
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="Void" Level="1">
+      <ComponentGroupRef Id="VoidComponents" />
+      <ComponentGroupRef Id="VoidExtras" />
+    </Feature>
+
+    <Icon Id="VoidIcon" SourceFile="$(var.RepoDir)\resources\win32\code.ico" />
+    <Property Id="ARPPRODUCTICON" Value="VoidIcon" />
+  </Package>
+
+  <Fragment>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="Void" />
+    </StandardDirectory>
+    <StandardDirectory Id="DesktopFolder" />
+  </Fragment>
+
+  <Fragment>
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Component Id="ProtocolHandler" Guid="*">
+        <RegistryKey Root="HKLM" Key="Software\Classes\void" ForceCreateOnInstall="yes" ForceDeleteOnUninstall="yes">
+          <RegistryValue Type="string" Value="URL:Void Protocol" KeyPath="yes" />
+          <RegistryValue Type="string" Name="URL Protocol" Value="" />
+          <RegistryKey Key="DefaultIcon">
+            <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]Void.exe&quot;,0" />
+          </RegistryKey>
+          <RegistryKey Key="shell">
+            <RegistryKey Key="open">
+              <RegistryKey Key="command">
+                <RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]Void.exe&quot; &quot;%1&quot;" />
+              </RegistryKey>
+            </RegistryKey>
+          </RegistryKey>
+        </RegistryKey>
+      </Component>
+    </DirectoryRef>
+
+    <DirectoryRef Id="ApplicationProgramsFolder">
+      <Component Id="StartMenuShortcut" Guid="*">
+        <Shortcut Id="VoidStartMenuShortcut" Name="Void" Description="Void Editor" Target="[INSTALLFOLDER]Void.exe" WorkingDirectory="INSTALLFOLDER" Icon="VoidIcon" AppUserModelId="Void.Editor" />
+        <RegistryValue Root="HKCU" Key="Software\Void\Installed" Name="StartMenu" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+
+    <DirectoryRef Id="DesktopFolder">
+      <Component Id="DesktopShortcut" Guid="*">
+        <Shortcut Id="VoidDesktopShortcut" Name="Void" Description="Void Editor" Target="[INSTALLFOLDER]Void.exe" WorkingDirectory="INSTALLFOLDER" Icon="VoidIcon" AppUserModelId="Void.Editor" />
+        <RegistryValue Root="HKCU" Key="Software\Void\Installed" Name="Desktop" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+
+    <ComponentGroup Id="VoidExtras">
+      <ComponentRef Id="ProtocolHandler" />
+      <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="DesktopShortcut" />
+    </ComponentGroup>
+  </Fragment>
+</Wix>

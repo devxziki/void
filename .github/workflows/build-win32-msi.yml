@@ -1,0 +1,93 @@
+name: Build Windows MSI Installers
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+  pull_request:
+    paths:
+      - '.github/workflows/build-win32-msi.yml'
+      - 'build/win32/msi/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Void win32-${{ matrix.arch }} MSI
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
+    runs-on: windows-latest
+    env:
+      npm_config_arch: ${{ matrix.arch }}
+      npm_config_runtime: electron
+      npm_config_target: 34.3.2
+      npm_config_foreground_scripts: "true"
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Configure pagefile (avoid OOM during mangled compile)
+        uses: al-cheb/configure-pagefile-action@v1
+        with:
+          minimum-size: 16GB
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: npm ci
+        timeout-minutes: 120
+
+      - name: Build Void (${{ matrix.arch }})
+        run: npm run gulp "vscode-win32-${{ matrix.arch }}-min"
+        timeout-minutes: 180
+
+      - name: Install Inno updater
+        run: npm run gulp "vscode-win32-${{ matrix.arch }}-inno-updater"
+
+      - name: Install WiX v4
+        run: |
+          dotnet tool install --global wix
+          echo "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Build MSI (${{ matrix.arch }})
+        shell: pwsh
+        run: |
+          $repo = (Get-Item (Resolve-Path .)).FullName
+          & "$repo/build/win32/msi/build-msi.ps1" -Arch "${{ matrix.arch }}"
+        timeout-minutes: 60
+
+      - name: Zip app (portable fallback)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path .build/msi | Out-Null
+          $arch = "${{ matrix.arch }}"
+          $version = (Get-Content -Raw package.json | ConvertFrom-Json).version
+          $appDir = Join-Path (Split-Path (Get-Location)) "VSCode-win32-$arch"
+          Compress-Archive -Path "$appDir\*" -DestinationPath ".build/msi/Void-win32-$arch-$version.zip" -CompressionLevel Optimal
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: void-win32-${{ matrix.arch }}-setup
+          path: |
+            .build/msi/VoidSetup-${{ matrix.arch }}-*.msi
+            .build/msi/Void-win32-${{ matrix.arch }}-*.zip
+          if-no-files-found: error
