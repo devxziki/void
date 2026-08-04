@@ -61,7 +61,9 @@ jobs:
         timeout-minutes: 120
 
       - name: Build Void (${{ matrix.arch }})
-        run: npm run gulp "vscode-win32-${{ matrix.arch }}-min"
+        # Non-min task: the mangler crashes on Void-added deps (google-auth-library .d.ts,
+        # "Overlapping edit"). App is functionally identical, just not minified.
+        run: npm run gulp "vscode-win32-${{ matrix.arch }}"
         timeout-minutes: 180
 
       - name: Install Inno updater
