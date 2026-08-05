@@ -52,7 +52,7 @@ $upgradeCode = $upgradeCode -replace '[\{\}\s]', ''
 $outDir = Join-Path $RepoDir '.build\msi'
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
-$scriptDir = Split-Path -Parent $PSScriptRoot   # build\win32\msi
+$scriptDir = $PSScriptRoot   # build\win32\msi (contains product.wxs)
 $productWxs = Join-Path $scriptDir 'product.wxs'
 $componentsWxs = Join-Path $outDir "components-$Arch.wxs"
 $outMsi = Join-Path $outDir "VoidSetup-$Arch-$version.msi"
@@ -152,6 +152,7 @@ $voidDir = ($appDir -replace '\\', '/')
 $repoDir = ($RepoDir -replace '\\', '/')
 $args = @(
     'build',
+    '-acceptEula', 'wix7',
     $productWxs,
     $componentsWxs,
     '-arch', $Arch,
