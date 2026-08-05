@@ -52,7 +52,7 @@ export const defaultProviderSettings = {
 		endpoint: '',
 	},
 	opencode: { // free OpenCode Zen models, served through the mini-dev proxy (https://mini-dev-proxy.vercel.app)
-		endpoint: 'https://mini-dev-proxy.vercel.app/opencode-proxy/v1',
+		endpoint: 'https://mini-dev-proxy.vercel.app/api/opencode-proxy/v1',
 		apiKey: '',
 	},
 	googleVertex: { // google https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/call-vertex-using-openai-library
