@@ -1,0 +1,184 @@
+name: Build Windows MSI Installers
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - '**'
+    tags:
+      - 'v*'
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.txt'
+  pull_request:
+    paths:
+      - '.github/workflows/build-win32-msi.yml'
+      - 'build/win32/msi/**'
+
+permissions:
+  contents: read
+
+env:
+  ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
+# A Windows MSI can only be produced on a Windows runner, so the pipeline is
+# split: the platform-neutral core compile (the slow part) runs once on
+# ubuntu-latest and is shared by both architectures, then each arch is packaged
+# and turned into an MSI on windows-2022.
+#
+# The mangler (build/lib/mangle) crashes on Void-added deps
+# (google-auth-library .d.ts, "Overlapping edit"), so the non-mangled compile
+# is used; the app is functionally identical, just not minified.
+jobs:
+  compile:
+    name: Compile core (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install system libraries for native modules
+        # Root npm ci builds native modules from source on Linux:
+        # - kerberos (Void-added dep) needs the Kerberos dev headers
+        # - native-keymap needs X11/xkb headers (via pkg-config x11 xkbfile)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libkrb5-dev libx11-dev libxkbfile-dev
+
+      - name: Install dependencies
+        # Full npm ci (not --ignore-scripts): the root postinstall installs the
+        # build/ and extensions/ workspaces' deps (build/node_modules provides
+        # ternary-stream, @vscode/vsce, ...) which the compile tasks require.
+        # Native modules build for the Electron ABI on Linux here; the
+        # Windows-target binaries are built later on the package job.
+        run: npm ci
+        timeout-minutes: 120
+
+      - name: Build Void React components
+        # Generates src/vs/workbench/contrib/void/browser/react/{src2,out}/,
+        # which the TypeScript compile imports as ./react/out/<bundle>/index.js.
+        run: npm run buildreact
+        timeout-minutes: 30
+
+      - name: Compile core (TypeScript -> out-build)
+        run: npm run gulp compile-build-without-mangling
+        timeout-minutes: 120
+
+      - name: Compile built-in extensions
+        # extensions-ci = non-native extensions + extension media. Not calling
+        # clean-extensions-build separately: this fork doesn't register that
+        # task with gulp (it is only used as an internal series dependency).
+        run: npm run gulp extensions-ci
+        timeout-minutes: 60
+
+      - name: Bundle VS Code (out-build -> out-vscode)
+        run: npm run gulp bundle-vscode
+        timeout-minutes: 60
+
+      - name: Package compile artifacts
+        run: tar -czf compile-artifacts.tar.gz out-vscode .build/extensions out-build/date
+
+      - name: Upload compile artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: compile-artifacts
+          path: compile-artifacts.tar.gz
+          retention-days: 1
+
+  package:
+    name: Void win32-${{ matrix.arch }} MSI
+    needs: compile
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
+    runs-on: windows-2022
+    env:
+      npm_config_arch: ${{ matrix.arch }}
+      npm_config_runtime: electron
+      npm_config_target: 34.3.2
+      npm_config_foreground_scripts: "true"
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Configure pagefile (avoid OOM during native module builds)
+        uses: al-cheb/configure-pagefile-action@v1.5
+        with:
+          minimum-size: 16GB
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Download compile artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: compile-artifacts
+
+      - name: Extract compile artifacts
+        run: |
+          tar -xzf compile-artifacts.tar.gz
+          Remove-Item compile-artifacts.tar.gz
+
+      - name: Install dependencies (native modules for ${{ matrix.arch }})
+        run: npm ci
+        timeout-minutes: 120
+
+      - name: Package Void into ../VSCode-win32-${{ matrix.arch }}
+        # Package-only task (-ci): compiles native extensions and packages the
+        # app from the pre-compiled out-vscode artifact; no TypeScript recompile.
+        run: npm run gulp "vscode-win32-${{ matrix.arch }}-ci"
+        timeout-minutes: 90
+
+      - name: Install Inno updater
+        run: npm run gulp "vscode-win32-${{ matrix.arch }}-inno-updater"
+
+      - name: Install WiX v4
+        run: |
+          dotnet tool install --global wix
+          echo "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Build MSI (${{ matrix.arch }})
+        shell: pwsh
+        run: |
+          $repo = (Get-Item (Resolve-Path .)).FullName
+          & "$repo/build/win32/msi/build-msi.ps1" -Arch "${{ matrix.arch }}" -RepoDir $repo
+        timeout-minutes: 60
+
+      - name: Zip app (portable fallback)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path .build/msi | Out-Null
+          $arch = "${{ matrix.arch }}"
+          $version = (Get-Content -Raw package.json | ConvertFrom-Json).version
+          $appDir = Join-Path (Split-Path (Get-Location)) "VSCode-win32-$arch"
+          Compress-Archive -Path "$appDir\*" -DestinationPath ".build/msi/Void-win32-$arch-$version.zip" -CompressionLevel Optimal
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: void-win32-${{ matrix.arch }}-setup
+          path: |
+            .build/msi/VoidSetup-${{ matrix.arch }}-*.msi
+            .build/msi/Void-win32-${{ matrix.arch }}-*.zip
+          if-no-files-found: error
