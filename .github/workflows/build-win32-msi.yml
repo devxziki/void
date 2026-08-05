@@ -161,6 +161,9 @@ jobs:
             test/smoke/node_modules
             .vscode/extensions/*/node_modules
           key: win32-${{ matrix.arch }}-node_modules-${{ hashFiles('package-lock.json', 'build/package-lock.json', 'remote/package-lock.json') }}-electron-34.3.2
+          # Save even when a later step (e.g. Build MSI) fails, so the next run
+          # starts from a warm cache instead of paying the full ~14 min npm ci.
+          save-always: true
 
       - name: Install dependencies (native modules for ${{ matrix.arch }})
         # On a node_modules cache hit this only sanity-checks the tree; on a
