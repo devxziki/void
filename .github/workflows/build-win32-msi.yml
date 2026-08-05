@@ -162,7 +162,7 @@ jobs:
         shell: pwsh
         run: |
           $repo = (Get-Item (Resolve-Path .)).FullName
-          & "$repo/build/win32/msi/build-msi.ps1" -Arch "${{ matrix.arch }}"
+          & "$repo/build/win32/msi/build-msi.ps1" -Arch "${{ matrix.arch }}" -RepoDir $repo
         timeout-minutes: 60
 
       - name: Zip app (portable fallback)

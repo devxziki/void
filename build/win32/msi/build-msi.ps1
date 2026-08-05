@@ -24,7 +24,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][ValidateSet('x64', 'arm64')][string]$Arch,
-    [string]$RepoDir = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)),
+    [string]$RepoDir = (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))),
     [string]$WixTool = 'wix'
 )
 
@@ -36,7 +36,7 @@ if (-not (Get-Command $WixTool -ErrorAction SilentlyContinue)) {
 
 $appDir = Join-Path (Split-Path -Parent $RepoDir) "VSCode-win32-$Arch"
 if (-not (Test-Path $appDir)) {
-    throw "App directory not found: $appDir (run npm run gulp vscode-win32-$Arch-min first)"
+    throw "App directory not found: $appDir (run npm run gulp vscode-win32-$Arch-ci first)"
 }
 if (-not (Test-Path (Join-Path $appDir 'Void.exe'))) {
     throw "Expected main executable not found: $(Join-Path $appDir 'Void.exe')"
