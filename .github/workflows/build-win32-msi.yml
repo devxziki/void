@@ -74,10 +74,10 @@ jobs:
         timeout-minutes: 120
 
       - name: Compile built-in extensions
-        run: |
-          npm run gulp clean-extensions-build
-          npm run gulp compile-non-native-extensions-build
-          npm run gulp compile-extension-media-build
+        # extensions-ci = non-native extensions + extension media. Not calling
+        # clean-extensions-build separately: this fork doesn't register that
+        # task with gulp (it is only used as an internal series dependency).
+        run: npm run gulp extensions-ci
         timeout-minutes: 60
 
       - name: Bundle VS Code (out-build -> out-vscode)
