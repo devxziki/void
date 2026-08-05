@@ -29,12 +29,21 @@
 
   <Fragment>
     <StandardDirectory Id="ProgramMenuFolder">
-      <Directory Id="ApplicationProgramsFolder" Name="Void" />
+      <Directory Id="ApplicationProgramsFolder" Name="Void">
+        <Component Id="StartMenuShortcut" Guid="*">
+          <Shortcut Id="VoidStartMenuShortcut" Name="Void" Description="Void Editor" Target="[INSTALLFOLDER]Void.exe" WorkingDirectory="INSTALLFOLDER" Icon="VoidIcon" />
+          <RegistryValue Root="HKCU" Key="Software\Void\Installed" Name="StartMenu" Type="integer" Value="1" KeyPath="yes" />
+        </Component>
+      </Directory>
     </StandardDirectory>
-    <StandardDirectory Id="DesktopFolder" />
-  </Fragment>
 
-  <Fragment>
+    <StandardDirectory Id="DesktopFolder">
+      <Component Id="DesktopShortcut" Guid="*">
+        <Shortcut Id="VoidDesktopShortcut" Name="Void" Description="Void Editor" Target="[INSTALLFOLDER]Void.exe" WorkingDirectory="INSTALLFOLDER" Icon="VoidIcon" />
+        <RegistryValue Root="HKCU" Key="Software\Void\Installed" Name="Desktop" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
     <DirectoryRef Id="INSTALLFOLDER">
       <Component Id="ProtocolHandler" Guid="*">
         <RegistryKey Root="HKLM" Key="Software\Classes\void" ForceCreateOnInstall="yes" ForceDeleteOnUninstall="yes">
@@ -51,20 +60,6 @@
             </RegistryKey>
           </RegistryKey>
         </RegistryKey>
-      </Component>
-    </DirectoryRef>
-
-    <DirectoryRef Id="ApplicationProgramsFolder">
-      <Component Id="StartMenuShortcut" Guid="*">
-        <Shortcut Id="VoidStartMenuShortcut" Name="Void" Description="Void Editor" Target="[INSTALLFOLDER]Void.exe" WorkingDirectory="INSTALLFOLDER" Icon="VoidIcon" AppUserModelId="Void.Editor" />
-        <RegistryValue Root="HKCU" Key="Software\Void\Installed" Name="StartMenu" Type="integer" Value="1" KeyPath="yes" />
-      </Component>
-    </DirectoryRef>
-
-    <DirectoryRef Id="DesktopFolder">
-      <Component Id="DesktopShortcut" Guid="*">
-        <Shortcut Id="VoidDesktopShortcut" Name="Void" Description="Void Editor" Target="[INSTALLFOLDER]Void.exe" WorkingDirectory="INSTALLFOLDER" Icon="VoidIcon" AppUserModelId="Void.Editor" />
-        <RegistryValue Root="HKCU" Key="Software\Void\Installed" Name="Desktop" Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </DirectoryRef>
 
