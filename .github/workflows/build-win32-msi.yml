@@ -63,6 +63,12 @@ jobs:
         run: npm ci
         timeout-minutes: 120
 
+      - name: Build Void React components
+        # Generates src/vs/workbench/contrib/void/browser/react/{src2,out}/,
+        # which the TypeScript compile imports as ./react/out/<bundle>/index.js.
+        run: npm run buildreact
+        timeout-minutes: 30
+
       - name: Compile core (TypeScript -> out-build)
         run: npm run gulp compile-build-without-mangling
         timeout-minutes: 120
