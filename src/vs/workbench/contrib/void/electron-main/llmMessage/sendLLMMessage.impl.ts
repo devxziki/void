@@ -155,6 +155,13 @@ const newOpenAICompatibleSDK = async ({ settingsOfProvider, providerName, includ
 		const headers = parseHeadersJSON(thisConfig.headersJSON)
 		return new OpenAI({ baseURL: thisConfig.endpoint, apiKey: thisConfig.apiKey, defaultHeaders: headers, ...commonPayloadOpts })
 	}
+	else if (providerName === 'opencode') {
+		// free OpenCode Zen models through the mini-dev proxy; the proxy's admin
+		// key is passed as the bearer token (models + chat both require it)
+		const thisConfig = settingsOfProvider[providerName]
+		const baseURL = thisConfig.endpoint || defaultProviderSettings.opencode.endpoint
+		return new OpenAI({ baseURL, apiKey: thisConfig.apiKey, ...commonPayloadOpts })
+	}
 	else if (providerName === 'groq') {
 		const thisConfig = settingsOfProvider[providerName]
 		return new OpenAI({ baseURL: 'https://api.groq.com/openai/v1', apiKey: thisConfig.apiKey, ...commonPayloadOpts })
@@ -936,6 +943,11 @@ export const sendLLMMessageToProviderImplementation = {
 		sendChat: (params) => _sendOpenAICompatibleChat(params),
 		sendFIM: null,
 		list: null,
+	},
+	opencode: {
+		sendChat: (params) => _sendOpenAICompatibleChat(params),
+		sendFIM: null,
+		list: (params) => _openaiCompatibleList(params),
 	},
 
 } satisfies CallFnOfProvider

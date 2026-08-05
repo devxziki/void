@@ -51,6 +51,10 @@ export const defaultProviderSettings = {
 	liteLLM: { // https://docs.litellm.ai/docs/providers/openai_compatible
 		endpoint: '',
 	},
+	opencode: { // free OpenCode Zen models, served through the mini-dev proxy (https://mini-dev-proxy.vercel.app)
+		endpoint: 'https://mini-dev-proxy.vercel.app/opencode-proxy/v1',
+		apiKey: '',
+	},
 	googleVertex: { // google https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/call-vertex-using-openai-library
 		region: 'us-west2',
 		project: '',
@@ -153,6 +157,14 @@ export const defaultModelsOfProvider = {
 	microsoftAzure: [],
 	awsBedrock: [],
 	liteLLM: [],
+	opencode: [ // free OpenCode Zen models (also auto-fetched from the proxy's /models endpoint)
+		'deepseek-v4-flash-free',
+		'mimo-v2-5-free',
+		'north-mini-code-free',
+		'nemotron-3-ultra-free',
+		'big-pickle',
+		'hy3-free',
+	],
 
 
 } as const satisfies Record<ProviderName, string[]>
@@ -1253,6 +1265,80 @@ const openaiCompatible: VoidStaticProviderInfo = {
 	},
 }
 
+// ---------------- OPENCODE (free OpenCode Zen models via mini-dev proxy) ----------------
+const opencodeModelOptions = { // https://opencode.ai/zen (free models proxied through https://mini-dev-proxy.vercel.app)
+	'deepseek-v4-flash-free': {
+		contextWindow: 128_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0, output: 0 },
+		downloadable: false,
+		supportsFIM: false,
+		supportsSystemMessage: 'system-role',
+		specialToolFormat: 'openai-style',
+		reasoningCapabilities: false,
+	},
+	'mimo-v2-5-free': {
+		contextWindow: 64_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0, output: 0 },
+		downloadable: false,
+		supportsFIM: false,
+		supportsSystemMessage: 'system-role',
+		specialToolFormat: 'openai-style',
+		reasoningCapabilities: false,
+	},
+	'north-mini-code-free': {
+		contextWindow: 128_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0, output: 0 },
+		downloadable: false,
+		supportsFIM: false,
+		supportsSystemMessage: 'system-role',
+		specialToolFormat: 'openai-style',
+		reasoningCapabilities: false,
+	},
+	'nemotron-3-ultra-free': {
+		contextWindow: 128_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0, output: 0 },
+		downloadable: false,
+		supportsFIM: false,
+		supportsSystemMessage: 'system-role',
+		specialToolFormat: 'openai-style',
+		reasoningCapabilities: false,
+	},
+	'big-pickle': { // big-context OpenCode Zen model
+		contextWindow: 1_000_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0, output: 0 },
+		downloadable: false,
+		supportsFIM: false,
+		supportsSystemMessage: 'system-role',
+		specialToolFormat: 'openai-style',
+		reasoningCapabilities: false,
+	},
+	'hy3-free': {
+		contextWindow: 128_000,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0, output: 0 },
+		downloadable: false,
+		supportsFIM: false,
+		supportsSystemMessage: 'system-role',
+		specialToolFormat: 'openai-style',
+		reasoningCapabilities: false,
+	},
+} as const satisfies Record<string, VoidStaticModelInfo>
+
+const opencodeSettings: VoidStaticProviderInfo = {
+	modelOptions: opencodeModelOptions,
+	modelOptionsFallback: (modelName) => extensiveModelOptionsFallback(modelName),
+	providerReasoningIOSettings: {
+		// openai-compatible reasoning
+		input: { includeInPayload: openAICompatIncludeInPayloadReasoning },
+		output: { nameOfFieldInDelta: 'reasoning_content' },
+	},
+}
+
 const liteLLMSettings: VoidStaticProviderInfo = { // https://docs.litellm.ai/docs/reasoning_content
 	modelOptionsFallback: (modelName) => extensiveModelOptionsFallback(modelName, { downloadable: { sizeGb: 'not-known' } }),
 	modelOptions: {},
@@ -1474,6 +1560,7 @@ const modelSettingsOfProvider: { [providerName in ProviderName]: VoidStaticProvi
 	googleVertex: googleVertexSettings,
 	microsoftAzure: microsoftAzureSettings,
 	awsBedrock: awsBedrockSettings,
+	opencode: opencodeSettings,
 } as const
 
 

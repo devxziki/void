@@ -106,6 +106,9 @@ export const displayInfoOfProviderName = (providerName: ProviderName): DisplayIn
 	else if (providerName === 'awsBedrock') {
 		return { title: 'AWS Bedrock', }
 	}
+	else if (providerName === 'opencode') {
+		return { title: 'OpenCode', }
+	}
 
 	throw new Error(`descOfProviderName: Unknown provider name: "${providerName}"`)
 }
@@ -128,6 +131,7 @@ export const subTextMdOfProviderName = (providerName: ProviderName): string => {
 	if (providerName === 'vLLM') return 'Read more about custom [Endpoints here](https://docs.vllm.ai/en/latest/getting_started/quickstart.html#openai-compatible-server).'
 	if (providerName === 'lmStudio') return 'Read more about custom [Endpoints here](https://lmstudio.ai/docs/app/api/endpoints/openai).'
 	if (providerName === 'liteLLM') return 'Read more about endpoints [here](https://docs.litellm.ai/docs/providers/openai_compatible).'
+	if (providerName === 'opencode') return 'Free [OpenCode Zen](https://opencode.ai/zen) models served through the [mini-dev proxy](https://mini-dev-proxy.vercel.app/). Enter the proxy API key to fetch the free models.'
 
 	throw new Error(`subTextMdOfProviderName: Unknown provider name: "${providerName}"`)
 }
@@ -156,6 +160,7 @@ export const displayInfoOfSettingName = (providerName: ProviderName, settingName
 												providerName === 'googleVertex' ? 'AIzaSy...' :
 													providerName === 'microsoftAzure' ? 'key-...' :
 														providerName === 'awsBedrock' ? 'key-...' :
+															providerName === 'opencode' ? 'key...' :
 															'',
 
 			isPasswordField: true,
@@ -167,6 +172,7 @@ export const displayInfoOfSettingName = (providerName: ProviderName, settingName
 				providerName === 'vLLM' ? 'Endpoint' :
 					providerName === 'lmStudio' ? 'Endpoint' :
 						providerName === 'openAICompatible' ? 'baseURL' : // (do not include /chat/completions)
+							providerName === 'opencode' ? 'baseURL' :
 							providerName === 'googleVertex' ? 'baseURL' :
 								providerName === 'microsoftAzure' ? 'baseURL' :
 									providerName === 'liteLLM' ? 'baseURL' :
@@ -176,6 +182,7 @@ export const displayInfoOfSettingName = (providerName: ProviderName, settingName
 			placeholder: providerName === 'ollama' ? defaultProviderSettings.ollama.endpoint
 				: providerName === 'vLLM' ? defaultProviderSettings.vLLM.endpoint
 					: providerName === 'openAICompatible' ? 'https://my-website.com/v1'
+						: providerName === 'opencode' ? defaultProviderSettings.opencode.endpoint
 						: providerName === 'lmStudio' ? defaultProviderSettings.lmStudio.endpoint
 							: providerName === 'liteLLM' ? 'http://localhost:4000'
 								: providerName === 'awsBedrock' ? 'http://localhost:4000/v1'
@@ -352,6 +359,12 @@ export const defaultSettingsOfProvider: SettingsOfProvider = {
 		...modelInfoOfDefaultModelNames(defaultModelsOfProvider.awsBedrock),
 		_didFillInProviderSettings: undefined,
 	},
+	opencode: { // free OpenCode Zen models via the mini-dev proxy
+		...defaultCustomSettings,
+		...defaultProviderSettings.opencode,
+		...modelInfoOfDefaultModelNames(defaultModelsOfProvider.opencode),
+		_didFillInProviderSettings: undefined,
+	},
 }
 
 
@@ -386,7 +399,7 @@ export const displayInfoOfFeatureName = (featureName: FeatureName) => {
 
 
 // the models of these can be refreshed (in theory all can, but not all should)
-export const refreshableProviderNames = localProviderNames
+export const refreshableProviderNames = [...localProviderNames, 'opencode'] satisfies ProviderName[] // local providers + the opencode proxy (fetches free models)
 export type RefreshableProviderName = typeof refreshableProviderNames[number]
 
 // models that come with download buttons
