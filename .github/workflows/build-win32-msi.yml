@@ -166,20 +166,40 @@ jobs:
           save-always: true
 
       - name: Install dependencies (native modules for ${{ matrix.arch }})
-        # On a node_modules cache hit this only sanity-checks the tree; on a
-        # miss it runs npm ci. npm ci can flake on Windows: git-sourced
-        # subproject deps (extensions/emmet, extensions/open-remote-ssh) are
-        # cloned into $npm_cache/_cacache/tmp and Windows Defender sometimes
-        # holds a lock, producing EPERM/EEXIST cleanup errors. Retry, clearing
-        # the cache tmp dir between attempts to drop stale locks.
+        # On a node_modules cache hit this verifies the tree; on a miss it runs
+        # npm ci. npm ci can flake on Windows: git-sourced subproject deps
+        # (extensions/emmet, extensions/open-remote-ssh) are cloned into
+        # $npm_cache/_cacache/tmp and Windows Defender sometimes holds a lock,
+        # producing EPERM/EEXIST cleanup errors. Retry, clearing the cache tmp
+        # dir between attempts to drop stale locks.
         shell: pwsh
         run: |
+          $cacheOk = $false
           if ("${{ steps.cache-node-modules.outputs.cache-hit }}" -eq "true") {
             Write-Host "node_modules restored from cache; verifying tree..."
             npm ls --depth=0 --silent
-            if ($LASTEXITCODE -eq 0) { exit 0 }
-            Write-Host "cache verification failed (exit $LASTEXITCODE); reinstalling"
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "root tree check failed (exit $LASTEXITCODE); reinstalling"
+            } else {
+              # The build's extension-packaging step runs `npm ls --all --omit=dev --parseable`
+              # inside extensions/ and `gulp.src([])` fails with "Invalid glob argument" when
+              # that scan errors out empty. Windows cache restores can drop the workspace
+              # symlinks that npm creates between extensions/ and the root node_modules,
+              # which is exactly what makes the scan error out. Reproduce the same check so
+              # a bad restore falls back to a clean install instead of failing the build.
+              Push-Location extensions
+              $extTree = npm ls --all --omit=dev --parseable 2>$null | Out-String
+              $extExit = $LASTEXITCODE
+              Pop-Location
+              if ($extExit -ne 0 -or [string]::IsNullOrWhiteSpace($extTree)) {
+                Write-Host "extensions production-deps scan failed (exit $extExit, empty output: $([string]::IsNullOrWhiteSpace($extTree))); reinstalling"
+              } else {
+                Write-Host "cache verified OK"
+                $cacheOk = $true
+              }
+            }
           }
+          if ($cacheOk) { exit 0 }
           $tries = 3
           for ($i = 1; $i -le $tries; $i++) {
             Write-Host "npm ci attempt $i/$tries"
