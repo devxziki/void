@@ -140,18 +140,102 @@ jobs:
           tar -xzf compile-artifacts.tar.gz
           Remove-Item compile-artifacts.tar.gz
 
+      - name: Cache Windows node_modules (${{ matrix.arch }})
+        # Restores the fully-installed Windows node_modules (per arch) from a
+        # previous run, skipping the ~14 min npm ci on cache hits. Native
+        # modules are compiled per OS+arch, so x64 and arm64 keep separate
+        # caches. The key changes when the lockfiles or the Electron version
+        # bump, forcing a clean reinstall. Caches are OS-specific, so this is
+        # only ever restored on a windows runner.
+        #
+        # The path list MUST cover every directory in build/npm/dirs.js: the
+        # root postinstall runs npm ci in each one. When extensions/node_modules
+        # was left out of the cache, every "hit" still lacked that tree, so the
+        # build's extension scan (npm ls --all --omit=dev --parseable in
+        # extensions/) resolved typescript from the root node_modules, errored
+        # out (exit 1), and the empty production-deps list crashed
+        # gulp.src([]) with "Invalid glob argument".
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            build/node_modules
+            extensions/node_modules
+            extensions/**/node_modules
+            remote/node_modules
+            remote/web/node_modules
+            test/automation/node_modules
+            test/integration/browser/node_modules
+            test/monaco/node_modules
+            test/smoke/node_modules
+            .vscode/extensions/*/node_modules
+          key: win32-${{ matrix.arch }}-node_modules-${{ hashFiles('package-lock.json', 'build/package-lock.json', 'remote/package-lock.json') }}-electron-34.3.2
+          # Save even when a later step (e.g. Build MSI) fails, so the next run
+          # starts from a warm cache instead of paying the full ~14 min npm ci.
+          save-always: true
+
       - name: Install dependencies (native modules for ${{ matrix.arch }})
-        # No node_modules cache: Windows cache restores drop the workspace
-        # symlinks npm creates between extensions/ and the root node_modules,
-        # making every restored tree inconsistent (npm ls exits non-zero) and
-        # the extension packaging scan flaky. We always do a clean npm ci.
-        # npm ci can flake on Windows: git-sourced subproject deps
+        # On a node_modules cache hit this verifies the tree; on a miss it runs
+        # npm ci. npm ci can flake on Windows: git-sourced subproject deps
         # (extensions/emmet, extensions/open-remote-ssh) are cloned into
         # $npm_cache/_cacache/tmp and Windows Defender sometimes holds a lock,
         # producing EPERM/EEXIST cleanup errors. Retry, clearing the cache tmp
         # dir between attempts to drop stale locks.
         shell: pwsh
         run: |
+          $cacheOk = $false
+          if ("${{ steps.cache-node-modules.outputs.cache-hit }}" -eq "true") {
+            Write-Host "node_modules restored from cache; reconciling file: dependency links..."
+            # npm installs file: deps (e.g. microsoft-authentication's keytar mock)
+            # as junctions on Windows, which the cache archive can drop. Recreate
+            # any that went missing so native-extension packaging sees a complete
+            # tree; npm ci fallback below covers anything else that got corrupted.
+            Get-ChildItem -Path . -Recurse -Depth 5 -Filter package.json -File |
+              Where-Object { $_.FullName -notmatch '\\node_modules\\' } |
+              ForEach-Object {
+                $pkg = $null
+                try { $pkg = Get-Content $_.FullName -Raw | ConvertFrom-Json } catch { return }
+                foreach ($prop in @('dependencies','devDependencies','optionalDependencies')) {
+                  if (-not $pkg.$prop) { continue }
+                  foreach ($name in $pkg.$prop.PSObject.Properties.Name) {
+                    $spec = $pkg.$prop.$name
+                    if ($spec -is [string] -and $spec -match '^file:') {
+                      $link = Join-Path $_.Directory "node_modules\$name"
+                      $target = Join-Path $_.Directory $spec.Substring(5)
+                      if ((Test-Path $link) -and -not (Test-Path (Join-Path $link 'package.json'))) {
+                        Remove-Item $link -Recurse -Force
+                      }
+                      if (-not (Test-Path $link)) {
+                        New-Item -ItemType Junction -Path $link -Target (Resolve-Path $target) | Out-Null
+                        Write-Host "recreated junction $link -> $target"
+                      }
+                    }
+                  }
+                }
+              }
+            Write-Host "verifying restored tree..."
+            npm ls --depth=0 --silent
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "root tree check failed (exit $LASTEXITCODE); reinstalling"
+            } else {
+              # The build's extension-packaging step runs the same scan and crashes
+              # gulp.src([]) with "Invalid glob argument" when it errors out empty.
+              Push-Location extensions
+              $extTree = npm ls --all --omit=dev --parseable 2>&1 | Out-String
+              $extExit = $LASTEXITCODE
+              Pop-Location
+              if ($extExit -ne 0 -or [string]::IsNullOrWhiteSpace($extTree)) {
+                Write-Host "extensions production-deps scan failed (exit $extExit, empty output: $([string]::IsNullOrWhiteSpace($extTree)))"
+                Write-Host $extTree
+                Write-Host "reinstalling"
+              } else {
+                Write-Host "cache verified OK"
+                $cacheOk = $true
+              }
+            }
+          }
+          if ($cacheOk) { exit 0 }
           $tries = 3
           for ($i = 1; $i -le $tries; $i++) {
             Write-Host "npm ci attempt $i/$tries"
