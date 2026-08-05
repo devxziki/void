@@ -75,12 +75,22 @@ function Get-DirPathIdMap([string]$rel, [string]$parentId) {
     return $id
 }
 
+function Get-DeterministicGuid([string]$seed) {
+    # WiX v4+ rejects Guid="*" for components with more than one file (the
+    # auto-guid is only valid when a single versioned file is the keypath).
+    # Emit a stable, explicit GUID derived from the component identity so
+    # multi-file directory components are accepted.
+    $hash = [System.Security.Cryptography.MD5]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($seed))
+    return [System.Guid]::new($hash).ToString().ToUpper()
+}
+
 function Add-Component([string]$dirId, [string]$relSrcDir) {
     $script:compCounter++
     $compId = 'c{0}' -f $script:compCounter
+    $guid = Get-DeterministicGuid "$dirId|$relSrcDir"
     $sb = [System.Collections.Generic.List[string]]::new()
     $sb.Add("<DirectoryRef Id=`"$dirId`">")
-    $sb.Add("  <Component Id=`"$compId`" Guid=`"*`">")
+    $sb.Add("  <Component Id=`"$compId`" Guid=`"$guid`">")
     Get-ChildItem -LiteralPath (Join-Path $appDir $relSrcDir) -File -Force | ForEach-Object {
         $script:fileCounter++
         $fileId = 'f{0}' -f $script:fileCounter
