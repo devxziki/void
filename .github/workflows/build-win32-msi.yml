@@ -141,7 +141,27 @@ jobs:
           Remove-Item compile-artifacts.tar.gz
 
       - name: Install dependencies (native modules for ${{ matrix.arch }})
-        run: npm ci
+        # npm ci can flake on Windows: git-sourced subproject deps
+        # (extensions/emmet, extensions/open-remote-ssh) are cloned into
+        # $npm_cache/_cacache/tmp and Windows Defender sometimes holds a lock,
+        # producing EPERM/EEXIST cleanup errors. Retry, clearing the cache tmp
+        # dir between attempts to drop stale locks.
+        shell: pwsh
+        run: |
+          $tries = 3
+          for ($i = 1; $i -le $tries; $i++) {
+            Write-Host "npm ci attempt $i/$tries"
+            npm ci
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            if ($i -lt $tries) {
+              $cache = (npm config get cache).Trim()
+              Write-Host "npm ci failed (exit $LASTEXITCODE); clearing cache tmp and retrying..."
+              Get-ChildItem -Path (Join-Path $cache "_cacache\tmp") -ErrorAction SilentlyContinue |
+                Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+              Start-Sleep -Seconds 10
+            }
+          }
+          exit 1
         timeout-minutes: 120
 
       - name: Package Void into ../VSCode-win32-${{ matrix.arch }}

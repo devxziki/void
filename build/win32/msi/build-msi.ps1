@@ -84,7 +84,7 @@ function Add-Component([string]$dirId, [string]$relSrcDir) {
     Get-ChildItem -LiteralPath (Join-Path $appDir $relSrcDir) -File -Force | ForEach-Object {
         $script:fileCounter++
         $fileId = 'f{0}' -f $script:fileCounter
-        $relPath = (Join-Path $relSrcDir $_.Name) -replace '\\', '/'
+        $relPath = if ($relSrcDir -eq '') { $_.Name } else { (Join-Path $relSrcDir $_.Name) -replace '\\', '/' }
         $sb.Add("    <File Id=`"$fileId`" Source=`"`$(var.VoidDir)/$relPath`" />")
     }
     $sb.Add("  </Component>")
